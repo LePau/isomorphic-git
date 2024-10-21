@@ -207,21 +207,27 @@ export async function _checkout({
       }
     })
 
-    await Promise.all(
+    // force sequential, because it can queue up child items at the same time as parent items, and if
+    // the FS backend is checking a child item before the parent item gets created, it can cause an
+    // exception (such as with zenfs/core InMemory backend).
+    for(const values of 
       ops
         .filter(([method]) => method === 'mkdir' || method === 'mkdir-index')
-        .map(async function([_, fullpath]) {
-          const filepath = `${dir}/${fullpath}`
-          await fs.mkdir(filepath)
-          if (onProgress) {
-            await onProgress({
-              phase: 'Updating workdir',
-              loaded: ++count,
-              total,
-            })
-          }
+    ) {
+      const method = values[0];
+      const fullpath = values[1];
+
+      const filepath = `${dir}/${fullpath}`
+      await fs.mkdir(filepath)
+      if (onProgress) {
+        await onProgress({
+          phase: 'Updating workdir',
+          loaded: ++count,
+          total,
         })
-    )
+      }
+
+    }
 
     await GitIndexManager.acquire({ fs, gitdir, cache }, async function(index) {
       await Promise.all(
